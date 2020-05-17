@@ -21,6 +21,8 @@ These notes are biased with my existing understanding of this topic so might mis
     - [CNN - ngram detector](#cnn---ngram-detector)
     - [RNN - Modelling sequences and stacks](#rnn---modelling-sequences-and-stacks)
     - [Concrete RNN Architecture](#concrete-rnn-architecture)
+    - [Modeling with RNN](#modeling-with-rnn)
+    - [Conditioned Generation](#conditioned-generation)
     - [Terms](#terms)
     - [Doubts](#doubts)
     - [Things To Read Up](#things-to-read-up)
@@ -563,16 +565,168 @@ $$RNN^*(x_{1:i},s_0)=y_{1:i}=O(s_i)=R(x_{1:i},s_{i-1})$$
     * lots and lots of small details
 
 ## Concrete RNN Architecture
+(Skipped a lot here because already covered in DL Specialization notes. Feel free to contribute here.)
+* CBOW: $s_i=R(x_{1:i},s_{i-1})=\bm{s_{i-1}+x_i}$
+* Elman Network or Simple RNN
+    * $s_i=R(x_{1:i},s_{i-1})=g(\bm{s_{i-1}{W^s}+x_i{W^x} + b})=g(\bm{[s_{i-1};x_i]W+b})$
+* Why vanishing Gradient? RNN is a deep NN. After repeadtedly multiplying the same matrix W for gradient, the effect of gradient in later stages is greatly reduced (vanish) or explodes in early time steps.
+* <b id="hadamard">Hadamard product</b>= element wise product = $x\odot b$
+* LSTM
+    * c - memory, h - hidden state
+    * i(input), f(forget), o(output)
+    * **Note** Recommended the bias term of forget gate with 1 
+
+$$\bm{s_i}=LSTM(\bm{x_{1:i},s_{i-1})}=[\bm{c_i;h_i}]\\
+\bm{c_i}=\bm{i\odot x_i+f\odot z}\\
+h_i=o\tanh(c_i)\\
+\bm i = g(\bm{[x_i;h_{i-1}]W_i + b_i})\\
+\bm f = g(\bm{[x_i;h_{i-1}]W_f + b_f})\\
+\bm o = g(\bm{[x_i;h_{i-1}]W_o + b_o})\\
+\bm z = \bm{o} \tanh(\bm{[x_i;h_{i-1}]W_z + b_z})\\
+y_i=h_i$$
+
+* GRU
+    * fewer gates
+    * has an additional relevance gate to control the impact of previous state on new cadidate state
+
+$$\bm{s_i}=GRU(\bm{x_{1:i},s_{i-1})}\\
+\bm{s_i}=\bm{(1-f)\odot x_i+f\odot \hat{s_i}}\\
+\bm r = g(\bm{[x_i;s_{i-1}]W_r + b_r})\\
+\bm f = g(\bm{[x_i;s_{i-1}]W_f + b_f})\\
+\bm{ \hat{s_i} }= \tanh(\bm{[x_iW^{xs} + (r\odot s_{i-1})W^{ss} + b_z})\\
+y_i=s_i$$
+
+* Variation of Simply RNN
+
+$$y_i=[c_i;h_i]\\
+c_i=(1-\alpha)x_iW^{x1}+\alpha c_{i-1}\\
+h_i=g(x_iW^{x2}+ c_{i}W^c + h_{i-1}W^h)$$
+
+* **Note** Beyond Gates: Keep an eye out for Neural Turing Machine and differentiable Stack
+* Droupout
+    * apply between layers of RNN (non recurrent part)
+    * tough to apply on recurerent part - information might get lost across time steps
+    * Apply same mask for all time steps in dropout
 
 
+## Modeling with RNN
+* sentence level sentiment classification
+    * ex. movie reviews into +ve and -ve
+    * method1: tokenize the sentence, feed into RNN, use output in MLP with 2 outputs, softmax and the cross entropy loss
+    * method2: use biRNN
+    * method3 (hierarchial): divide the sentences into multiple spans (ex. based on punctuation), pass each span through a BiRNN, their outputs are now a sequence, feed this sequence to RNN then MLP and softmax with cross entropy loss
+* document level sentiment classification
+    * similar to method 3 above, but instead use the sentences as spans
+    * variation: after getting output from level2 RNN in above, take the average of the output vector in all timesteps of level2 RNN and then feed it to MLP
+* Subject-Verb Agreement Grammaticality detection
+    * ex. "keys are on the table", "keys is on the table", "keys for the black cupboard are on the table"
+    * becomes easy if we have parse tree
+    * feed it all to RNN with cross entropy - Works very well
+* POS tagging
+    * encode words$x_i=\phi(w_{1:n},i)$, use BiRNN on $x_{1:i}$ to get $y_i$ for all i. These go to MLP for giving the tag.
+    * how to encode?
+        * embedding vectors (problem with unseen words)
+        * convert each character to a vector and use character level BiRNN (forward focuses of suffixes and backward focuses on prefixes)
+        * can concat the above two as well
+        * character level CNN
+    * structured model: can also use previous tags
+        * k-window of tags : feed previous k tag vectors along with $y_i$ to MLP
+        * use RNN: feed all tag vectors so far to RNN, concat that to $y_i$ and use in MLP
+* Document Classification
+    * use character level RNN/CNN to get word vectors
+    * Use character level heirarchial CNN to get a small vector from one (or more) words for each word
+* ARC-Factored dependency parsing
+    * we have to create the dependency tree
+    * a function for each word pair ($w_i,w_j$), given the strength associated with $w_i$ being the head of $w_j$
+    * replace this function with MLP on concatenation of 2 BiRNN vectors (for head and modifier words)
+    * concat word vector and POS tag vector, feed it to BiRNN
+* **Note**: thus when we need word features sensitive to their position and sentence structure, use BiLSTM vectors 
 
-
-
-
-
-
-
-
+## Conditioned Generation
+* RNN generator
+    * start with a start symbol, get conditioned distribution, pick best/random/beam search, and feed it as input to generate the next symbol and so on until end of sentence. 
+    * new word is picked from the distribution generated by RNN - $p(t_j=k|t_{1:j-1})$
+    * Character level RNN have show incredible sensitivity to previous words (and longer history) to make meaningful patterns.
+* Training RNN generator
+    * train it as a transducer
+    * if sentence is $w_1,w_2,w_3,..,w_n$ and $n+1$ is eos, then these $n+1$ are the inputs and expected outputs.
+    * Since we are feeding $w_i$ even when $w_{i-1}$ is not the max probabilty, this method is called <b id="teacher-forcing">teacher forcing</b>. BUT it has problem handing deviations from gold sequence
+* Conditioned Generator (Encoder-Decoder)
+    * simple RNN generator is 
+    * $\bm{\hat{t}_{j+1}}\sim p(\bm{t_{j+1}=k|\hat{t}_{1:j}})$ where $p(\bm{t_{j+1}=k|\hat{t}_{1:j}}) = f(RNN(\bm{\hat{t}_{1:j}}))$ where f can be softmax or MLP over RNN output
+    * Conditioned generation - at each stage of generation, concat a conditioning context vector $c$ to the previously generated token. So,
+    * $\bm{\hat{t}_{j+1}}\sim p(\bm{t_{j+1}=k|\hat{t}_{1:j},c})$ where $p(\bm{t_{j+1}=k|\hat{t}_{1:j},c}) = f(RNN(\bm{v_{1:j}}))$ where $v_i=[\bm{\hat{t}_i;c}]$
+    * ![](images/DL_for_NLP-conditionedRNN.png)
+    * choices for $c$
+        * news topic for news generation/summarization
+        * movie genre for reviews
+        * text tense etc for text analysis
+* **Sequence To Sequence** (Encoder Decoder)
+    * $c$ is a sequence
+    * input $\bm{x_{1:n}}$ (eg. French sentence) and output is $\bm{x_{1:m}}$ (eg. English sentence)
+    * encode $\bm{x_{1:n}}$ using an encoder (usually RNN) $\bm{c}=RNN^{enc}(\bm{x_{1:n}})$ and then use this in a conditioned generator (RNN decoder) to get $\bm{x_{1:m}}$
+    * train both encoder decoder together, supervision on decoder with <i id=doubt2>"langauge model objective"</i>
+    ![](images/DL_for_NLP-seq2seqTrain.png)
+    * Applications:
+        * machine translation : Tip - input sequence fed in reverse so that first word can have more impact on first word in translation
+        * Email auto response :eg. google inbox. Refer to the [paper](https://www.kdd.org/kdd2016/papers/files/Paper_1069.pdf)
+        * morphological inflection : char level seq2seq model, given root and the expected inflection (eg. gender, tense etc) produce the expected morphological inflection
+    * seq2seq can't be used everywhere. Some other architectures give better results, but seq2seq is hard to apply but still gives good results
+        * sentence compression by deletion: eg. He, the author of 4 books, will get paid -> He will get paid. seq2seq output is a seq of Keep, Delete and Stop operations. -> basically a seq tagging task, BiRNN can do better
+        * POS tagging, NER - again seq tagging task
+        * syntactic parsing
+* Other conditioning contexts
+    * CNN output, or some other model 
+    * in Dialog, use an trainable embedding vector of user responses to condition on user syle (age, gender etc) and capture that in created response
+    * Image as condition for *image captioning*
+    * *visual storytelling* - series of images as input and story is an output
+* **Unsupervised sentence similarity**
+    * find a method to compare similar sentences. How? - convert to vectors. How? 
+        * use seq2seq and train for some task
+        * throw away the decoder
+        * the encoder output $c$ is supposed to be a good representation of the sentence
+        * comparison method depends on the task used 
+    * Auto Encoding
+        * encode sentence and reproduce it
+        * should encode the necessary info
+        * might have large dist when similar meaning but different words
+    * Machine Translation
+        * English to some other language
+        * vector must capture the essence of the sentece
+    * **skip thoughts**
+        * hypothesis: similar sentences appear in similar contexts, where context are the surrounding sentences
+        * encode sentence to vectors
+        * use one decoder to produce previous sentence
+        * use another decoder to produce following sentence
+        * [paper](https://papers.nips.cc/paper/5950-skip-thought-vectors.pdf)
+    * syntactic similarity: use seq2seq to produce a sream of bracketing decisions, captures syntactic structure
+* Conditioned generation with attention
+    * uses a *soft attention mechanism* to decide on which parts of sentence should be focused on
+    * encoder, decoder and attention mechanism are all trained together
+    * get seq of vectors from input seq $\bm{x_{1:n}}$, $\bm{c_{1:n}}=\text{biRNN}^*(\bm{x_{1:n}})$
+    * for generation step $j$, attention vector is $\bm{c}^j=\text{attend}(\bm{c_{1:n}},\hat{t}_{1:j})$
+    * use it to generate next word,$\hat{t}_{j+1}\sim p(t_{j+1}=k|t_{1:j},\bm{x_{1:n}})=f(RNN([\bm{t_{1:j};c^j}]))=f(O(\bm{s_{j+1}})), \bm{s_{j+1}} = R(\bm{s_j,[t_j;c^j}])$, $f$ can be softmax over MLP
+    * attend function can be anything, below is one used by the original author of attention mechanism
+        * $\bm{c^j=\sum_{i=1}^n\alpha_{[i]}^j \cdot c_i}$, where $\bm{\alpha^j}$ is vector of attention weights fot stage j, and $\bm{\sum_{i=1}^n\alpha_{[i]}^j}=1$, $\bm{\alpha_{[i]}^j}>=0 \text{  }\forall i$ 
+        * getting weights: $\bm{\alpha_{[i]}^j=\alpha_{[1]}^j,..,\alpha_{[n]}^j}=\text{softmax}(\bm{\bar{\alpha}_{[1]}^j,..,\bar{\alpha}_{[n]}^j})=\text{softmax}(\text{MLP}^{\text{att}}([\bm{s_j},\bm{c_1}]),..,\text{MLP}^{\text{att}}([\bm{s_j},\bm{c_n}]))$, where $\bm{s_j}$ is decoder state at stage $j$
+        * try writing the entire model end-to-end!
+    * Why use attention on encoder output and not input directly?
+        * each $\bm{c_i}$ represents each word $\bm{x_i}$ in it's *sentential context* (a window around the word)
+        * can extract relevant properties of the input using trainable encoder
+        * ![](images/DL_for_NLP-attention.png)
+    * time complexity is $O(m\times n)$, ( excluding the scoring function, like softmax)
+    * *interpretability*: non-attentive encoder-decoder don't tell much about the encoding and how decoding happens, attention weights give some insight on what is being used for decoding
+* Applications of Attention - State of the Art
+    * Machine Translation: Use attention. Improvements by changing input. Some improvements below:
+        * sub word units: use BPE to get prominent sub words, eg. er, est, un, low, wid. Converts, *widest network* to *wid_ _est net_ _work*, feed to network, process output to combine subwords
+        * incorporating monolingual data: usually MT models are trained on parallel corpora of aligned sentences in source and target language. 
+             * *Translational Model* on parallel data
+             * *language model* on monolingual data(much larger dataset)
+             * in Seq2seq decoder is language model and encoder-decoder interaction is translational model. How to take advantage of monolingual data
+                * one hacky method: source language A and target language B. first train a translation model from B to A. Convert all monilingual data of B to A. now use these (B,A) pairs as (A,B) to train your translation model
+        * linguisitc annotations: supplement input with linguistic annotation. Instead of just using embedding vector of word, concat it with vector of POS tag, dependency label (parse tree), lemma and morphological features
+    * morphological inflection: attentive seq2seq; input:list of info like target POS, gender, noun etc and list of input word characters; output is target word characters
+    * syntactic parsing: input-seq of words, output-seq of bracketing decision. Need much more refinements in data, and output parser.
 
 
 ## Terms
@@ -590,6 +744,7 @@ $$RNN^*(x_{1:i},s_0)=y_{1:i}=O(s_i)=R(x_{1:i},s_{i-1})$$
 * [3CosAdd](#3cosadd)
 * [Feature Hashing/Hash Kernel](#feature-hashing)
 * [BackPropagation Through Time](#bptt)
+* [Teacher Forcing](#teacher-forcing)
 
 Important Notes
 * [Literature](#note1)
@@ -597,6 +752,7 @@ Important Notes
 ## Doubts
 * [transformation on embedding matrix](#doubt1)
 * why vanishing gradient in rnn
+* [Language modeling objective in seq2seq](#doubt2)
 
 
 ## Things To Read Up
@@ -606,4 +762,5 @@ Important Notes
 * [Traditional Language Modelling](http://www.cs.columbia.edu/~mcollins/lm-spring2013.pdf)
 * adaptive learning rate algorithms, RMS Prop, Adam, AdaDelta (Deeplearning lectures)
 * SGD plus momentum (Deeplearning lectures)
+* [Gmail auto response paper](https://www.kdd.org/kdd2016/papers/files/Paper_1069.pdf)
 * have added some notes as **note**/**tip** which I found noteworthy/useful
