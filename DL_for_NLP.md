@@ -23,6 +23,7 @@ These notes are biased with my existing understanding of this topic so might mis
     - [Concrete RNN Architecture](#concrete-rnn-architecture)
     - [Modeling with RNN](#modeling-with-rnn)
     - [Conditioned Generation](#conditioned-generation)
+    - [Modeling Trees with RNN](#modeling-trees-with-rnn)
     - [Terms](#terms)
     - [Doubts](#doubts)
     - [Things To Read Up](#things-to-read-up)
@@ -728,6 +729,50 @@ h_i=g(x_iW^{x2}+ c_{i}W^c + h_{i-1}W^h)$$
     * morphological inflection: attentive seq2seq; input:list of info like target POS, gender, noun etc and list of input word characters; output is target word characters
     * syntactic parsing: input-seq of words, output-seq of bracketing decision. Need much more refinements in data, and output parser.
 
+## Modeling Trees with RNN
+* uses:
+    * syntactic trees, discourse trees, trees representing sentiment in various parts of words
+    * predict based on nodes, leaves, structure, span
+* RecRNN
+    * recursive RNN - for Binary Trees
+    * encodes a node of the tree
+    * $vec(p)=f(vec(c_1),vec(c_2))$ where $c_1$ and $c_2$ are children on $p$
+    * just as in RNN $s_i$ encodes info on sequence $x_{1:i}$, RecRNN encodes everything in the subtree p.
+    * Binary Tree $T$ over n-word sequence
+    * unlabeled tree over seq $x_1,..,x_n$
+        * can be represented as a unique set of triples $(i,k,j), \text{  }i\leq k\leq j$
+        * the node spans $x_{i:j}$ and is the parent of the nodes spanning $x_{i:k}$ and $x_{k+1:j}$
+        * terminal is (i,i,i) for word $x_i$
+    * labeled tree over seq $x_1,..,x_n$
+        * tuple $(A\rightarrow B,C,i,k,j)$, where A,B,C are the labels for $x_{i:j}$, $x_{i:k}$ and $x_{k+1:j}$ respectively
+        * terminal is $(A\rightarrow A,A,i,i,i)$
+        * These tuples are called **production rules**
+        * production rule $(A\rightarrow B,C,i,k,j)$ can denote the respective node as $q^A_{i:j}$
+        * eg- ![](images/DL_for_NLP-RecRNN_tree.png), ![](images/DL_for_NLP-RecRNN_tuple.png)
+* RecRNN Definition
+    * Tree $T$ over seq $x_1,..,x_n$ with production rules $(A\rightarrow B,C,i,k,j)$ and nodes denoted as $q^A_{i:j}$
+    * each node has a **inside state vector** $s^A_{i:j}$ which represents the node $q^A_{i:j}$ and it's children subtrees
+    * RecRNN is as below, where 
+        * $v(x_i)$ is the encoding of $x_i$
+        * R is a linear transformation with/without non-linear activation
+        * label encoding for A is v(A)
+        * $W^{BC}$ is weight for a label combination of BC (used only when number of such combinations is small)
+    
+$$R(x_1,..,x_n,T)=\{s^A_{i:j}\in \mathbb{R}^d|q^A_{i:j}\in T\}\\s^A_{i:i}=v(x_i)\\
+s^A_{i:j}=R(\bm{A,B,C,s^A_{i:k},s^A_{k+1:j}})=g(\bm{[s^A_{i:k};s^A_{k+1:j}]W}), \bm{W} \in \mathbb{R}^{2d\times d}\\
+\text{ if using label encoding,}\\
+s^A_{i:j}=g(\bm{[s^A_{i:k};s^A_{k+1:j};v(B);v(C)]W}), \bm{W} \in \mathbb{R}^{2d+2d_{label}\times d}\\
+\text{alternatively } s^A_{i:j}=g(\bm{[s^A_{i:k};s^A_{k+1:j}]W^{BC}})
+$$
+*   * <b id="outside-state">Outside State Vector</b>: encode subtrees and also represent entire structure around that node in subtree. Can be thought of as BiRNN equivalent. More info at [paper](https://www.aclweb.org/anthology/D14-1081.pdf)
+* variants:
+    * LSTM type RecRNN to address vanishing gradient
+    * recursive vector-matrix model: represent word with vector (normal encoding) and matrix (learnable, better than adding and linear transformation)
+    * recursive neural tensor network <b id="recrnn-tensor"></b>
+* Training: define loss over tree/node/set of nodes using their labels and then backpropagate
+* RecRNN can be used as an encoder as well
+* Linearized Tree: If recursion not required and need encoding sensitive to tree structure; linearize the parse tree and feed it into RNN or BiRNN; use that as encoding; or train RNN over tree as language model and use that to evaluate it
+* RecRNN for modelling langauge as tree structure not very strong. Normal RNN work just as well.
 
 ## Terms
 * OOV - out of vocabulary
@@ -753,7 +798,7 @@ Important Notes
 * [transformation on embedding matrix](#doubt1)
 * why vanishing gradient in rnn
 * [Language modeling objective in seq2seq](#doubt2)
-
+* [Rec Neural Tensor Network](#recrnn-tensor)
 
 ## Things To Read Up
 * [Borel Measurable Functions](#borel)
@@ -764,3 +809,4 @@ Important Notes
 * SGD plus momentum (Deeplearning lectures)
 * [Gmail auto response paper](https://www.kdd.org/kdd2016/papers/files/Paper_1069.pdf)
 * have added some notes as **note**/**tip** which I found noteworthy/useful
+* [outside state vector](#outside-state)
