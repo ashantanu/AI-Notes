@@ -9,6 +9,7 @@
     - [TRADE for TOD Systems](#trade-for-tod-systems)
     - [Unlikelihood Loss](#unlikelihood-loss)
     - [Truncated Log Loss](#truncated-log-loss)
+    - [Other Papers](#other-papers)
     - [Template](#template)
 
 <!-- /TOC -->
@@ -136,6 +137,7 @@ Attention Patterns
 * Attention matrix in transformers
     * Left-to-right: process chunks from ltr. Good for autoregressive modelling tasks like LM. Looses out when model can benefit from bidirectional context
     * Sparse: Don't compute the full $n^2$ attention matrix. ex. Dilated sliding window by [BlockSparse](https://openai.com/blog/block-sparse-gpu-kernels/) in [sparse transformer](https://arxiv.org/pdf/1904.10509) 
+    * can plug in the long version into other transformer models. [Script](https://github.com/allenai/longformer/blob/master/scripts/convert_model_to_long.ipynb)
 
 **Misc things**
 : For LM and long document modelling, paper used character level model.
@@ -311,7 +313,11 @@ loss,objective,unlikelihood
 * Understand rejection sampling
 
 **tags**
-loss,objective,truncated,sensitivity
+loss, objective, truncated, sensitivity
+
+## Other Papers
+* [TOD Survey(2020)](https://arxiv.org/pdf/2003.07490.pdf): Survey of Task Oriented Dialog Systems. Nicely summarises the problem and demarcates the latest models by the problems they solve.
+* [Mem2Seq](https://www.aclweb.org/anthology/P18-1136.pdf): SOTA model for TOD using KB and history. DID NOT UNDERSTAND the implementation at all.
 
 
 ## Template
